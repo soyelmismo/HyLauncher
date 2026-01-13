@@ -135,6 +135,23 @@ func DownloadJRE() error {
 	return nil
 }
 
+func GetJavaExec() string {
+	jreDir := filepath.Join(env.GetDefaultAppDir(), "release", "package", "jre", "latest")
+	javaBin := filepath.Join(jreDir, "bin", "java")
+	if runtime.GOOS == "windows" {
+		javaBin += ".exe"
+	}
+
+	// Check if it exists
+	if _, err := os.Stat(javaBin); os.IsNotExist(err) {
+		// If java is missing, just return "java" and hope it's in PATH (fallback)
+		fmt.Println("Warning: JRE not found, fallback to system java")
+		return "java"
+	}
+
+	return javaBin
+}
+
 func verifySHA256(filePath, expected string) error {
 	f, err := os.Open(filePath)
 	if err != nil {
