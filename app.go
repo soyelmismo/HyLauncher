@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
+
+	"HyLauncher/internal/java"
 )
 
 // App struct
@@ -18,4 +21,16 @@ func NewApp() *App {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+}
+
+func (a *App) DownloadGame() error {
+	err := java.DownloadJRE()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (a *App) LaunchGame() error {
+	return errors.New("asd")
 }

@@ -1,0 +1,161 @@
+package java
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"time"
+
+	"HyLauncher/internal/env"
+)
+
+type JREPlatform struct {
+	URL    string `json:"url"`
+	SHA256 string `json:"sha256"`
+}
+
+type JREJSON struct {
+	Version     string                            `json:"version"`
+	DownloadURL map[string]map[string]JREPlatform `json:"download_url"`
+}
+
+type progressReader struct {
+	reader    io.Reader
+	total     int64
+	read      int64
+	lastPrint time.Time
+}
+
+func (p *progressReader) Read(b []byte) (int, error) {
+	n, err := p.reader.Read(b)
+	p.read += int64(n)
+
+	if time.Since(p.lastPrint) > time.Second {
+		percent := float64(p.read) / float64(p.total) * 100
+		fmt.Printf("\rDownloading... %.1f%%", percent)
+		p.lastPrint = time.Now()
+	}
+	return n, err
+}
+
+func DownloadJRE() error {
+	osName := env.GetOS()
+	arch := env.GetArch()
+
+	basePath := env.GetDefaultAppDir()
+	if err := env.CreateFolders(basePath); err != nil {
+		return err
+	}
+
+	cacheDir := filepath.Join(basePath, "cache")
+	jreLatest := filepath.Join(basePath, "release", "package", "jre", "latest")
+
+	if isJREInstalled(jreLatest) {
+		fmt.Println("JRE already installed, skipping")
+		return nil
+	}
+
+	resp, err := http.Get("https://launcher.hytale.com/version/release/jre.json")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var jreData JREJSON
+	if err := json.NewDecoder(resp.Body).Decode(&jreData); err != nil {
+		return err
+	}
+
+	osData, ok := jreData.DownloadURL[osName]
+	if !ok {
+		return fmt.Errorf("no JRE for OS: %s", osName)
+	}
+
+	platform, ok := osData[arch]
+	if !ok {
+		return fmt.Errorf("no JRE for arch: %s on %s", arch, osName)
+	}
+
+	fileName := filepath.Base(platform.URL)
+	cacheFile := filepath.Join(cacheDir, fileName)
+
+	if _, err := os.Stat(cacheFile); os.IsNotExist(err) {
+		fmt.Println("Downloading JRE...")
+
+		resp2, err := http.Get(platform.URL)
+		if err != nil {
+			return err
+		}
+		defer resp2.Body.Close()
+
+		out, err := os.Create(cacheFile)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+
+		pr := &progressReader{
+			reader: resp2.Body,
+			total:  resp2.ContentLength,
+		}
+
+		if _, err := io.Copy(out, pr); err != nil {
+			return err
+		}
+
+		fmt.Println("\nDownload complete")
+	}
+
+	fmt.Println("Verifying JRE...")
+	if err := verifySHA256(cacheFile, platform.SHA256); err != nil {
+		_ = os.Remove(cacheFile)
+		return err
+	}
+
+	fmt.Println("Extracting JRE...")
+	if err := extractJRE(cacheFile, jreLatest); err != nil {
+		return err
+	}
+
+	if osName != "windows" {
+		java := filepath.Join(jreLatest, "bin", "java")
+		_ = os.Chmod(java, 0755)
+	}
+
+	fmt.Println("JRE installed successfully")
+	return nil
+}
+
+func verifySHA256(filePath, expected string) error {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, f); err != nil {
+		return err
+	}
+
+	sum := hex.EncodeToString(hasher.Sum(nil))
+	if sum != expected {
+		return fmt.Errorf("SHA256 mismatch: expected %s got %s", expected, sum)
+	}
+	return nil
+}
+
+func isJREInstalled(jreDir string) bool {
+	java := filepath.Join(jreDir, "bin", "java")
+	if runtime.GOOS == "windows" {
+		java += ".exe"
+	}
+	_, err := os.Stat(java)
+	return err == nil
+}
