@@ -86,16 +86,24 @@ func extractAndApplyFix(zipPath, gameDir, cacheDir string) error {
 		return fmt.Errorf("failed to copy client executable: %w", err)
 	}
 
-	// Copy server folder
-	serverSrc := filepath.Join(tempDir, "Server")
-	serverDst := filepath.Join(gameDir, "Server")
-
-	// Remove existing server folder
-	if err := os.RemoveAll(serverDst); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove existing server folder: %w", err)
+	// Copy ONLY specific server files (not the whole folder)
+	serverDir := filepath.Join(gameDir, "Server")
+	if err := os.MkdirAll(serverDir, 0755); err != nil {
+		return fmt.Errorf("failed to create server directory: %w", err)
 	}
-	if err := util.CopyDir(serverSrc, serverDst); err != nil {
-		return fmt.Errorf("failed to copy server folder: %w", err)
+
+	// Copy HytaleServer.jar (replace existing)
+	serverJarSrc := filepath.Join(tempDir, "Server", "HytaleServer.jar")
+	serverJarDst := filepath.Join(serverDir, "HytaleServer.jar")
+	if err := util.CopyFile(serverJarSrc, serverJarDst); err != nil {
+		return fmt.Errorf("failed to copy HytaleServer.jar: %w", err)
+	}
+
+	// Copy start-server.bat (add new file)
+	startBatSrc := filepath.Join(tempDir, "Server", "start-server.bat")
+	startBatDst := filepath.Join(serverDir, "start-server.bat")
+	if err := util.CopyFile(startBatSrc, startBatDst); err != nil {
+		return fmt.Errorf("failed to copy start-server.bat: %w", err)
 	}
 
 	return nil
