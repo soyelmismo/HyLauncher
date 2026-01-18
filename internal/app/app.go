@@ -51,6 +51,7 @@ func (a *App) Startup(ctx context.Context) {
 		env.CreateFolders()
 	}()
 
+	// Check for launcher updates in background
 	go func() {
 		fmt.Println("Starting background update check...")
 		a.checkUpdateSilently()
@@ -62,12 +63,14 @@ func (a *App) Startup(ctx context.Context) {
 	}()
 }
 
+// handleError creates an AppError, emits it to frontend, and returns it
 func (a *App) handleError(errType hyerrors.ErrorType, userMsg string, err error) error {
 	appErr := hyerrors.NewAppError(errType, userMsg, err)
 	a.emitError(appErr)
 	return appErr
 }
 
+// emitError sends structured errors to frontend
 func (a *App) emitError(err error) {
 	if appErr, ok := err.(*hyerrors.AppError); ok {
 		runtime.EventsEmit(a.ctx, "error", appErr)
@@ -95,6 +98,7 @@ func (a *App) GetVersions() GameVersions {
 }
 
 func (a *App) DownloadAndLaunch(playerName string) error {
+	// Validate nickname
 	if len(playerName) == 0 {
 		return a.handleError(
 			hyerrors.ErrorTypeValidation,
@@ -117,14 +121,18 @@ func (a *App) DownloadAndLaunch(playerName string) error {
 	}
 	targetVersion := a.cfg.Settings.GameVersion
 
+	// Ensure game is installed
 	if err := game.EnsureInstalledWithOptions(a.ctx, channel, targetVersion, a.cfg.Settings.OnlineFix, a.progress); err != nil {
 		wrappedErr := hyerrors.NewAppError(hyerrors.ErrorTypeGame, "Failed to install or update game", err)
 		a.emitError(wrappedErr)
 		return wrappedErr
 	}
 
+	// Launch the game
 	a.progress.Report(progress.StageLaunch, 100, "Launching game...")
 
+	// Use the current profile's ID as the UUID to ensure persistence across name changes
+	// and consistency with the config file
 	playerUUID := a.cfg.CurrentProfile
 
 	versionStr := "latest"
@@ -142,6 +150,7 @@ func (a *App) DownloadAndLaunch(playerName string) error {
 	a.gameCmd = cmd
 	runtime.EventsEmit(a.ctx, "game-launched", nil)
 
+	// Monitor game process
 	go func() {
 		if err := cmd.Wait(); err != nil {
 			fmt.Printf("Game process exited with error: %v\n", err)

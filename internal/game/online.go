@@ -29,6 +29,7 @@ func ApplyOnlineFixWindows(ctx context.Context, gameDir string, reporter *progre
 
 	zipPath := filepath.Join(cacheDir, onlineFixAssetName)
 
+	// Download from GitHub releases
 	reporter.Report(progress.StageOnlineFix, 0, "Downloading online-fix...")
 
 	scaler := progress.NewScaler(reporter, progress.StageOnlineFix, 0, 70)
@@ -40,12 +41,14 @@ func ApplyOnlineFixWindows(ctx context.Context, gameDir string, reporter *progre
 		return fmt.Errorf("failed to download online-fix: %w", err)
 	}
 
+	// Extract and apply the fix
 	reporter.Report(progress.StageOnlineFix, 70, "Extracting online-fix...")
 
 	if err := extractAndApplyFix(zipPath, gameDir, cacheDir); err != nil {
 		return err
 	}
 
+	// Cleanup
 	_ = os.Remove(zipPath)
 
 	reporter.Report(progress.StageOnlineFix, 100, "Online-fix applied successfully")
@@ -56,6 +59,7 @@ func ApplyOnlineFixWindows(ctx context.Context, gameDir string, reporter *progre
 func extractAndApplyFix(zipPath, gameDir, cacheDir string) error {
 	tempDir := filepath.Join(cacheDir, "temp_extract")
 
+	// Clean and create temp directory
 	if err := os.RemoveAll(tempDir); err != nil {
 		return fmt.Errorf("failed to clean temp directory: %w", err)
 	}
@@ -64,10 +68,12 @@ func extractAndApplyFix(zipPath, gameDir, cacheDir string) error {
 	}
 	defer os.RemoveAll(tempDir)
 
+	// Extract zip
 	if err := extract.ExtractZip(zipPath, tempDir); err != nil {
 		return fmt.Errorf("failed to extract ZIP: %w", err)
 	}
 
+	// Copy client executable
 	clientSrc := filepath.Join(tempDir, "Client", "HytaleClient.exe")
 	clientDst := filepath.Join(gameDir, "Client", "HytaleClient.exe")
 
@@ -78,17 +84,20 @@ func extractAndApplyFix(zipPath, gameDir, cacheDir string) error {
 		return fmt.Errorf("failed to copy client executable: %w", err)
 	}
 
+	// Copy ONLY specific server files (not the whole folder)
 	serverDir := filepath.Join(gameDir, "Server")
 	if err := os.MkdirAll(serverDir, 0755); err != nil {
 		return fmt.Errorf("failed to create server directory: %w", err)
 	}
 
+	// Copy HytaleServer.jar (replace existing)
 	serverJarSrc := filepath.Join(tempDir, "Server", "HytaleServer.jar")
 	serverJarDst := filepath.Join(serverDir, "HytaleServer.jar")
 	if err := fileutil.CopyFile(serverJarSrc, serverJarDst); err != nil {
 		return fmt.Errorf("failed to copy HytaleServer.jar: %w", err)
 	}
 
+	// Copy start-server.bat (add new file)
 	startBatSrc := filepath.Join(tempDir, "Server", "start-server.bat")
 	startBatDst := filepath.Join(serverDir, "start-server.bat")
 	if err := fileutil.CopyFile(startBatSrc, startBatDst); err != nil {
@@ -103,11 +112,13 @@ func EnsureServerAndClientFix(ctx context.Context, gameDir string, reporter *pro
 		return nil
 	}
 
+	// Check if server exists
 	serverBat := filepath.Join(gameDir, "Server", "start-server.bat")
 	if _, err := os.Stat(serverBat); err == nil {
 		return nil
 	}
 
+	// Server missing, download and apply online fix
 	reporter.Report(progress.StageOnlineFix, 0, "Applying online fix for server...")
 
 	if err := ApplyOnlineFixWindows(ctx, gameDir, reporter); err != nil {

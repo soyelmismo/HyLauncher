@@ -20,11 +20,14 @@ var (
 	isInstalling bool
 )
 
+// EnsureInstalled - Original version from upstream (for compatibility)
 func EnsureInstalled(ctx context.Context, reporter *progress.Reporter) error {
 	return EnsureInstalledWithOptions(ctx, "release", 0, true, reporter)
 }
 
+// EnsureInstalledWithOptions - New function with additional options
 func EnsureInstalledWithOptions(ctx context.Context, channel string, targetVersion int, enableOnlineFix bool, reporter *progress.Reporter) error {
+	// Prevent multiple simultaneous installations
 	installMutex.Lock()
 	if isInstalling {
 		installMutex.Unlock()
@@ -39,6 +42,7 @@ func EnsureInstalledWithOptions(ctx context.Context, channel string, targetVersi
 		installMutex.Unlock()
 	}()
 
+	// Download JRE
 	if err := java.DownloadJRE(ctx, reporter); err != nil {
 		return fmt.Errorf("failed to download Java Runtime: %w", err)
 	}
@@ -48,10 +52,12 @@ func EnsureInstalledWithOptions(ctx context.Context, channel string, targetVersi
 		return fmt.Errorf("failed to install Butler tool: %w", err)
 	}
 
+	// Find latest version with details
 	if reporter != nil {
 		reporter.Report(progress.StageVerify, 0, "Checking for game updates")
 	}
 
+	// Run version check (will use cache if available)
 	result := patch.FindLatestVersionWithDetails(channel)
 
 	if result.Error != nil {
@@ -90,10 +96,12 @@ func EnsureInstalledWithOptions(ctx context.Context, channel string, targetVersi
 		)
 	}
 
+	// If targetVersion is 0, use the latest version, otherwise use the specified one
 	installVersion := result.LatestVersion
 	installDirName := "latest"
 
 	if targetVersion > 0 {
+		// Verify if the requested version exists
 		if err := patch.VerifyVersionExists(channel, targetVersion); err != nil {
 			return fmt.Errorf("requested version %d is not available: %w", targetVersion, err)
 		}
@@ -120,6 +128,7 @@ func InstallGame(ctx context.Context, versionType string, remoteVer int, install
 
 	gameInstallDir := filepath.Join(env.GetDefaultAppDir(), versionType, "package", "game", installDirName)
 
+	// Adjust game client executable to operating system
 	gameClient := "HytaleClient"
 	if runtime.GOOS == "windows" {
 		gameClient += ".exe"
@@ -127,6 +136,7 @@ func InstallGame(ctx context.Context, versionType string, remoteVer int, install
 	clientPath := filepath.Join(gameInstallDir, "Client", gameClient)
 	_, clientErr := os.Stat(clientPath)
 
+	// Check if our game version is same as latest
 	if local == remoteVer && clientErr == nil {
 		if reporter != nil {
 			reporter.Report(progress.StageComplete, 100, "Game is up to date")
@@ -146,16 +156,20 @@ func InstallGame(ctx context.Context, versionType string, remoteVer int, install
 		}
 	}
 
+	// Download the patch file
 	pwrPath, err := patch.DownloadPWR(ctx, versionType, prevVer, remoteVer, reporter)
 	if err != nil {
 		return fmt.Errorf("failed to download game patch: %w", err)
 	}
+
+	// Verify the patch file exists and is readable
 	info, err := os.Stat(pwrPath)
 	if err != nil {
 		return fmt.Errorf("patch file not accessible: %w", err)
 	}
 	fmt.Printf("Patch file size: %d bytes\n", info.Size())
 
+	// Apply the patch
 	if reporter != nil {
 		reporter.Report(progress.StagePatch, 0, "Applying game patch...")
 	}
@@ -164,14 +178,17 @@ func InstallGame(ctx context.Context, versionType string, remoteVer int, install
 		return fmt.Errorf("failed to apply game patch: %w", err)
 	}
 
+	// Verify installation
 	if _, err := os.Stat(clientPath); err != nil {
 		return fmt.Errorf("game installation incomplete: client executable not found at %s", clientPath)
 	}
 
+	// Save the new version
 	if err := patch.SaveLocalVersion(versionType, remoteVer); err != nil {
 		fmt.Printf("Warning: failed to save version info: %v\n", err)
 	}
 
+	// Apply online fix only on windows if enabled
 	if runtime.GOOS == "windows" && enableOnlineFix {
 		if reporter != nil {
 			reporter.Report(progress.StageOnlineFix, 0, "Applying online fix...")
