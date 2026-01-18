@@ -195,6 +195,7 @@ export namespace app {
 	export class GameVersions {
 	    current: string;
 	    latest: string;
+	    available: number[];
 	
 	    static createFrom(source: any = {}) {
 	        return new GameVersions(source);
@@ -204,6 +205,7 @@ export namespace app {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.current = source["current"];
 	        this.latest = source["latest"];
+	        this.available = source["available"];
 	    }
 	}
 	

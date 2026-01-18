@@ -42,6 +42,7 @@ const App: React.FC = () => {
   const [showDiag, setShowDiag] = useState<boolean>(false);
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [error, setError] = useState<any>(null);
+  const [channel, setChannel] = useState<string>('release');
 
   const refreshProfiles = async () => {
     try {
@@ -55,21 +56,18 @@ const App: React.FC = () => {
 
   const checkGameUpdates = async () => {
     try {
-      const versions = await GetVersions();
       const settings = await GetSettings();
-
+      const channel = settings.channel || "release";
+      const versions = await GetVersions(channel);
       const cur = versions.current;
       const lat = versions.latest;
-
       setCurrent(cur);
       setLatestGameVersion(lat);
-
       const curNum = parseInt(cur);
       const latNum = parseInt(lat);
       const isLatestSelected = settings.gameVersion === 0;
       const hasInstalledVersion = curNum > 0;
       const needsUpdate = isLatestSelected && hasInstalledVersion && curNum < latNum;
-
       setIsGameUpdateAvailable(needsUpdate);
     } catch (err) {
       console.error("Failed to check game updates:", err);
@@ -77,29 +75,37 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    refreshProfiles();
-    checkGameUpdates();
+    const init = async () => {
+      try {
+        const settings = await GetSettings();
+        setChannel(settings.channel || 'release');
+        await refreshProfiles();
+        await checkGameUpdates();
+      } catch (err) {
+        console.error("Failed to initialize app:", err);
+      }
+    };
+    init();
 
-    EventsOn('update:available', (asset: any) => {
+    const updateAvailableListener = EventsOn('update:available', (asset: any) => {
       console.log('Update available event received:', asset);
       setUpdateAsset(asset);
     });
 
-    EventsOn('update:progress', (d: number, t: number) => {
+    const updateProgressListener = EventsOn('update:progress', (d: number, t: number) => {
       console.log(`Update progress: ${d}/${t} bytes`);
       const percentage = t > 0 ? (d / t) * 100 : 0;
       setProgress(percentage);
       setUpdateStats({ d, t });
     });
 
-    EventsOn('progress-update', (data: any) => {
+    const progressUpdateListener = EventsOn('progress-update', (data: any) => {
       setProgress(data.progress);
       setStatus(data.message);
       setCurrentFile(data.currentFile || "");
       setDownloadSpeed(data.speed || "");
       setDownloaded(data.downloaded || 0);
       setTotal(data.total || 0);
-
       if (data.progress >= 100 && data.stage === 'launch') {
         setTimeout(() => {
           setIsDownloading(false);
@@ -109,16 +115,24 @@ const App: React.FC = () => {
       }
     });
 
-    EventsOn('game-launched', () => {
+    const gameLaunchedListener = EventsOn('game-launched', () => {
       setIsPlaying(true);
       setIsDownloading(false);
       setStatus("Game Running...");
     });
 
-    EventsOn('game-closed', () => {
+    const gameClosedListener = EventsOn('game-closed', () => {
       setIsPlaying(false);
       setStatus("Ready to play");
     });
+
+    return () => {
+      updateAvailableListener();
+      updateProgressListener();
+      progressUpdateListener();
+      gameLaunchedListener();
+      gameClosedListener();
+    };
   }, []);
 
   const handleUpdate = async () => {
@@ -199,7 +213,6 @@ const App: React.FC = () => {
           }}
           isPlaying={isPlaying}
           isUpdateAvailable={isGameUpdateAvailable}
-
           isDownloading={isDownloading}
           progress={progress}
           status={status}
@@ -223,6 +236,5 @@ const App: React.FC = () => {
     </div>
   );
 };
-
 
 export default App;

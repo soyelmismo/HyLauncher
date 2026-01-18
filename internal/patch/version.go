@@ -31,6 +31,7 @@ var (
 	versionCacheMutex sync.RWMutex
 	versionCacheTTL   = 5 * time.Minute
 	lastCheckTime     = make(map[string]time.Time)
+	versionCheckMutex sync.Mutex
 )
 
 func GetLocalVersion(channel string) string {
@@ -84,7 +85,19 @@ func FindLatestVersionWithDetails(versionType string) VersionCheckResult {
 	}
 	versionCacheMutex.RUnlock()
 
+	versionCheckMutex.Lock()
+	defer versionCheckMutex.Unlock()
+	versionCacheMutex.RLock()
+	if cached, exists := versionCache[cacheKey]; exists {
+		if time.Since(lastCheckTime[cacheKey]) < versionCacheTTL {
+			fmt.Printf("Using cached version (after lock): %d\n", cached.LatestVersion)
+			versionCacheMutex.RUnlock()
+			return *cached
+		}
+	}
+	versionCacheMutex.RUnlock()
 	fmt.Println("Performing version check...")
+
 	result := performVersionCheck(versionType)
 
 	// Cache the result

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, X, Save, HardDrive, Monitor, Cpu, Folder, Loader2 } from 'lucide-react';
-import { GetSettings, SaveSettings, GetGameVersions } from '../../wailsjs/go/app/App';
-import { config } from '../../wailsjs/go/models';
+import { Settings, X, Save, HardDrive, Monitor, Cpu, Folder, Loader2, ChevronDown } from 'lucide-react';
+import { GetSettings, SaveSettings, GetVersions } from '../../wailsjs/go/app/App';
+import { config, app } from '../../wailsjs/go/models';
+import { AnimatePresence } from 'framer-motion';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -14,6 +15,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const [availableVersions, setAvailableVersions] = useState<number[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [isVersionOpen, setIsVersionOpen] = useState(false);
+    const [isChannelOpen, setIsChannelOpen] = useState(false);
 
     useEffect(() => {
         loadSettings();
@@ -27,17 +30,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
     const loadVersions = async (channel: string) => {
         try {
-            const versions = await GetGameVersions(channel);
-            setAvailableVersions(versions || []);
+            const versions: app.GameVersions = await GetVersions(channel);
+
+            const uniqueVersions = [...new Set(versions.available || [])]
+                .filter(v => v > 0)
+                .sort((a, b) => b - a);
+
+            setAvailableVersions(uniqueVersions);
         } catch (err) {
             console.error("Failed to load versions:", err);
+            setAvailableVersions([]);
         }
     };
 
     const loadSettings = async () => {
         try {
             const data = await GetSettings();
-            // Ensure we have a valid object instance
             setSettings(data);
         } catch (err) {
             console.error("Failed to load settings:", err);
@@ -60,15 +68,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
     const updateSetting = (key: keyof config.GameSettings, value: any) => {
         if (!settings) return;
-        const newSettings = new config.GameSettings(settings);
-        // @ts-ignore
-        newSettings[key] = value;
-        setSettings(newSettings);
+        setSettings(prev => {
+            if (!prev) return null;
+            const newSettings = new config.GameSettings(prev);
+            // @ts-ignore
+            newSettings[key] = value;
+            return newSettings;
+        });
     };
 
-    // Render loading state if needed, or just show the modal with a spinner overlay
     if (loading && !settings) {
-        // You might want a better loading state
+        return (
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50"
+            >
+                <div className="flex flex-col items-center gap-4">
+                    <Loader2 size={40} className="animate-spin text-[#FFA845]" />
+                    <p className="text-gray-400">Loading settings...</p>
+                </div>
+            </motion.div>
+        );
     }
 
     return (
@@ -102,33 +123,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </button>
                 </div>
 
-                {loading ? (
-                    <div className="flex-1 flex items-center justify-center flex-col gap-4">
-                        <Loader2 size={40} className="animate-spin text-[#FFA845]" />
-                        <p className="text-gray-400 text-sm">Loading configuration...</p>
-                    </div>
-                ) : settings ? (
+                {settings ? (
                     <div className="flex flex-1 overflow-hidden">
                         {/* Sidebar */}
                         <div className="w-48 bg-black/20 border-r border-white/5 p-4 flex flex-col gap-2">
-                            <TabButton
-                                active={activeTab === 'game'}
-                                onClick={() => setActiveTab('game')}
-                                icon={<HardDrive size={18} />}
-                                label="Game"
-                            />
-                            <TabButton
-                                active={activeTab === 'video'}
-                                onClick={() => setActiveTab('video')}
-                                icon={<Monitor size={18} />}
-                                label="Video"
-                            />
-                            <TabButton
-                                active={activeTab === 'java'}
-                                onClick={() => setActiveTab('java')}
-                                icon={<Cpu size={18} />}
-                                label="Java"
-                            />
+                            <TabButton active={activeTab === 'game'} onClick={() => setActiveTab('game')} icon={<HardDrive size={18} />} label="Game" />
+                            <TabButton active={activeTab === 'video'} onClick={() => setActiveTab('video')} icon={<Monitor size={18} />} label="Video" />
+                            <TabButton active={activeTab === 'java'} onClick={() => setActiveTab('java')} icon={<Cpu size={18} />} label="Java" />
                         </div>
 
                         {/* Content */}
@@ -148,40 +149,96 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                             </button>
                                         </div>
                                     </Section>
-
                                     <Section title="Update Settings" description="Configure game version and update channel">
                                         <div className="space-y-4">
-                                            <div>
+                                            <div className="relative">
                                                 <label className="text-xs text-gray-500 mb-1 block">Update Channel</label>
-                                                <select
-                                                    value={settings.channel || 'release'}
-                                                    onChange={(e) => updateSetting('channel', e.target.value)}
-                                                    className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:border-[#FFA845]/50 focus:outline-none transition-colors appearance-none"
+                                                <div
+                                                    onClick={() => setIsChannelOpen(!isChannelOpen)}
+                                                    className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-sm text-white cursor-pointer flex justify-between items-center hover:border-[#FFA845]/30 transition-colors"
                                                 >
-                                                    <option value="release">Release</option>
-                                                    <option value="pre-release">Pre-Release</option>
-                                                </select>
+                                                    <span className="capitalize">{settings.channel || 'release'}</span>
+                                                    <ChevronDown size={14} className={`text-gray-500 transition-transform ${isChannelOpen ? 'rotate-180' : ''}`} />
+                                                </div>
+
+                                                <AnimatePresence>
+                                                    {isChannelOpen && (
+                                                        <motion.div
+                                                            initial={{ opacity: 0, y: -10 }}
+                                                            animate={{ opacity: 1, y: 0 }}
+                                                            exit={{ opacity: 0, y: -10 }}
+                                                            className="absolute top-full left-0 w-full mt-1 bg-[#0d0d0d] border border-white/10 rounded-lg shadow-2xl z-50 overflow-hidden backdrop-blur-2xl"
+                                                        >
+                                                            {['release', 'pre-release'].map((ch) => (
+                                                                <div
+                                                                    key={ch}
+                                                                    onClick={() => {
+                                                                        updateSetting('channel', ch);
+                                                                        setIsChannelOpen(false);
+                                                                    }}
+                                                                    className={`px-4 py-2 text-sm cursor-pointer transition-colors hover:bg-white/5 ${settings.channel === ch ? 'text-[#FFA845] font-bold' : 'text-gray-300'}`}
+                                                                >
+                                                                    <span className="capitalize">{ch}</span>
+                                                                </div>
+                                                            ))}
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
                                             </div>
-                                            <div>
+
+                                            {/* Selector de Versión (El que pediste específicamente) */}
+                                            <div className="relative">
                                                 <label className="text-xs text-gray-500 mb-1 block">Target Version</label>
-                                                <select
-                                                    value={settings.gameVersion}
-                                                    onChange={(e) => updateSetting('gameVersion', parseInt(e.target.value))}
-                                                    className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:border-[#FFA845]/50 focus:outline-none transition-colors appearance-none"
+                                                <div
+                                                    onClick={() => setIsVersionOpen(!isVersionOpen)}
+                                                    className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-sm text-white cursor-pointer flex justify-between items-center hover:border-[#FFA845]/30 transition-colors"
                                                 >
-                                                    <option value={0}>Latest (Auto-Update)</option>
-                                                    {availableVersions.map(v => (
-                                                        <option key={v} value={v}>Version {v}</option>
-                                                    ))}
-                                                </select>
+                                                    <span>{settings.gameVersion === 0 ? "Latest (Auto-Update)" : `Version ${settings.gameVersion}`}</span>
+                                                    <ChevronDown size={14} className={`text-gray-500 transition-transform ${isVersionOpen ? 'rotate-180' : ''}`} />
+                                                </div>
+
+                                                <AnimatePresence>
+                                                    {isVersionOpen && (
+                                                        <motion.div
+                                                            initial={{ opacity: 0, y: -10 }}
+                                                            animate={{ opacity: 1, y: 0 }}
+                                                            exit={{ opacity: 0, y: -10 }}
+                                                            className="absolute top-full left-0 w-full mt-1 bg-[#0d0d0d] border border-white/10 rounded-lg shadow-2xl z-50 overflow-hidden backdrop-blur-2xl max-h-[200px] overflow-y-auto custom-scrollbar"
+                                                        >
+                                                            {/* Opción Latest */}
+                                                            <div
+                                                                onClick={() => {
+                                                                    updateSetting('gameVersion', 0);
+                                                                    setIsVersionOpen(false);
+                                                                }}
+                                                                className={`px-4 py-2 text-sm cursor-pointer transition-colors hover:bg-white/5 ${settings.gameVersion === 0 ? 'text-[#FFA845] font-bold' : 'text-gray-300'}`}
+                                                            >
+                                                                Latest (Auto-Update)
+                                                            </div>
+
+                                                            {/* Lista de versiones disponibles */}
+                                                            {availableVersions.map(v => (
+                                                                <div
+                                                                    key={`version-${v}`}
+                                                                    onClick={() => {
+                                                                        updateSetting('gameVersion', v);
+                                                                        setIsVersionOpen(false);
+                                                                    }}
+                                                                    className={`px-4 py-2 text-sm cursor-pointer transition-colors hover:bg-white/5 ${settings.gameVersion === v ? 'text-[#FFA845] font-bold' : 'text-gray-300'}`}
+                                                                >
+                                                                    Version {v}
+                                                                </div>
+                                                            ))}
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
                                             </div>
                                         </div>
                                     </Section>
-
                                     <div className="flex items-center justify-between bg-white/5 p-4 rounded-lg border border-white/5">
                                         <div>
                                             <h4 className="text-sm font-medium text-white">Online Fix</h4>
-                                            <p className="text-xs text-gray-500">Installs Online-Fix in your game </p>
+                                            <p className="text-xs text-gray-500">Installs Online-Fix in your game</p>
                                         </div>
                                         <button
                                             onClick={() => updateSetting('onlineFix', !settings.onlineFix)}
@@ -294,7 +351,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </button>
                     <button
                         onClick={handleSave}
-                        disabled={loading || saving || !settings}
+                        disabled={saving}
                         className="px-6 py-2 bg-[#FFA845] hover:bg-[#ffb460] text-black font-bold rounded-lg transition-colors text-sm flex items-center gap-2 disabled:opacity-50"
                     >
                         {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
@@ -306,7 +363,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     );
 };
 
-const TabButton = ({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: any, label: string }) => (
+const TabButton = ({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: any; label: string }) => (
     <button
         onClick={onClick}
         className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-medium ${active
@@ -319,7 +376,7 @@ const TabButton = ({ active, onClick, icon, label }: { active: boolean, onClick:
     </button>
 );
 
-const Section = ({ title, description, children }: { title: string, description: string, children: React.ReactNode }) => (
+const Section = ({ title, description, children }: { title: string; description: string; children: React.ReactNode }) => (
     <div className="bg-white/5 border border-white/5 rounded-xl p-5">
         <div className="mb-4">
             <h4 className="text-sm font-bold text-white mb-1">{title}</h4>

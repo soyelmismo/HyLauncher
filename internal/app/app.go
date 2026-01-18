@@ -28,8 +28,9 @@ type App struct {
 }
 
 type GameVersions struct {
-	Current string `json:"current"`
-	Latest  string `json:"latest"`
+	Current   string `json:"current"`
+	Latest    string `json:"latest"`
+	Available []int  `json:"available"`
 }
 
 func NewApp() *App {
@@ -83,17 +84,25 @@ func (a *App) emitError(err error) {
 	}
 }
 
-func (a *App) GetVersions() GameVersions {
-	channel := a.cfg.Settings.Channel
+func (a *App) GetVersions(channel string) GameVersions {
 	if channel == "" {
-		channel = "release"
+		channel = a.cfg.Settings.Channel
 	}
+
 	current := patch.GetLocalVersion(channel)
-	latest := patch.FindLatestVersion(channel)
-	fmt.Printf("GetVersions: Channel=%s, Current=%s, Latest=%d\n", channel, current, latest)
+
+	result := patch.FindLatestVersionWithDetails(channel)
+	latest := result.LatestVersion
+
+	available := make([]int, latest)
+	for v := 1; v <= latest; v++ {
+		available = append(available, v)
+	}
+
 	return GameVersions{
-		Current: current,
-		Latest:  strconv.Itoa(latest),
+		Current:   current,
+		Latest:    strconv.Itoa(latest),
+		Available: available,
 	}
 }
 

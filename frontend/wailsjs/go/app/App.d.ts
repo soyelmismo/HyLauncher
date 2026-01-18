@@ -19,8 +19,6 @@ export function GetCrashReports():Promise<Array<diagnostics.CrashReport>>;
 
 export function GetCurrentProfile():Promise<config.Profile>;
 
-export function GetGameVersions(arg1:string):Promise<Array<number>>;
-
 export function GetLauncherVersion():Promise<string>;
 
 export function GetLogs():Promise<string>;
@@ -33,7 +31,7 @@ export function GetProfiles():Promise<Array<config.Profile>>;
 
 export function GetSettings():Promise<config.GameSettings>;
 
-export function GetVersions():Promise<app.GameVersions>;
+export function GetVersions(arg1:string):Promise<app.GameVersions>;
 
 export function OpenFolder():Promise<void>;
 

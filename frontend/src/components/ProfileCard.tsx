@@ -71,7 +71,11 @@ export const ProfileSection: React.FC<ProfileProps> = ({
           </div>
         </div>
         <div className="flex items-center justify-between bg-[#090909]/[0.55] backdrop-blur-md rounded-lg px-3 py-2 border border-white/5">
-          <span className="text-xs text-gray-300">{currentVersion || "Not installed"}</span>
+          <span className="text-xs text-gray-300">
+            {currentVersion
+              ? currentVersion === "0" ? "Not installed" : `v${currentVersion}`
+              : "Checking..."}
+          </span>
         </div>
       </div>
 

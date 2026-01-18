@@ -30,10 +30,6 @@ export function GetCurrentProfile() {
   return window['go']['app']['App']['GetCurrentProfile']();
 }
 
-export function GetGameVersions(arg1) {
-  return window['go']['app']['App']['GetGameVersions'](arg1);
-}
-
 export function GetLauncherVersion() {
   return window['go']['app']['App']['GetLauncherVersion']();
 }
@@ -58,8 +54,8 @@ export function GetSettings() {
   return window['go']['app']['App']['GetSettings']();
 }
 
-export function GetVersions() {
-  return window['go']['app']['App']['GetVersions']();
+export function GetVersions(arg1) {
+  return window['go']['app']['App']['GetVersions'](arg1);
 }
 
 export function OpenFolder() {
