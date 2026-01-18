@@ -10,6 +10,7 @@ export function DeleteGame() {
   return window['go']['app']['App']['DeleteGame']();
 }
 
+// @ts-ignore
 export function DownloadAndLaunch(arg1) {
   return window['go']['app']['App']['DownloadAndLaunch'](arg1);
 }
@@ -46,6 +47,7 @@ export function SaveDiagnosticReport() {
   return window['go']['app']['App']['SaveDiagnosticReport']();
 }
 
+// @ts-ignore
 export function SetNick(arg1) {
   return window['go']['app']['App']['SetNick'](arg1);
 }
