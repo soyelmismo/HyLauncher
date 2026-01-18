@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 
 	"HyLauncher/internal/env"
 	"HyLauncher/internal/platform"
 	"HyLauncher/internal/progress"
+	"HyLauncher/pkg/download"
 )
 
 // ApplyPWR - Original version from upstream
@@ -44,7 +46,7 @@ func ApplyPWRWithOptions(ctx context.Context, channel string, pwrFile string, in
 		_ = os.Chmod(butlerPath, 0755)
 	}
 
-	cmd := platform.Command(
+	cmd := exec.Command(
 		butlerPath,
 		"apply",
 		"--staging-dir", stagingDir,
@@ -80,4 +82,34 @@ func ApplyPWRWithOptions(ctx context.Context, channel string, pwrFile string, in
 	reporter.Report(progress.StagePatch, 100, "Game patched!")
 
 	return nil
+}
+
+func DownloadPWR(ctx context.Context, versionType string, prevVer int, targetVer int, reporter *progress.Reporter) (string, error) {
+	cacheDir := filepath.Join(env.GetDefaultAppDir(), "cache")
+	_ = os.MkdirAll(cacheDir, 0755)
+	osName := runtime.GOOS
+	arch := runtime.GOARCH
+	fileName := fmt.Sprintf("%d.pwr", targetVer)
+	dest := filepath.Join(cacheDir, fileName)
+	tempDest := dest + ".tmp"
+
+	_ = os.Remove(tempDest)
+
+	if _, err := os.Stat(dest); err == nil {
+		reporter.Report(progress.StagePWR, 100, "PWR file cached")
+		return dest, nil
+	}
+
+	// Create a scaler for the download portion (0-100%)
+	scaler := progress.NewScaler(reporter, progress.StagePWR, 0, 100)
+
+	url := fmt.Sprintf("https://game-patches.hytale.com/patches/%s/%s/%s/%d/%s", osName, arch, versionType, prevVer, fileName)
+	if err := download.DownloadWithReporter(dest, url, fileName, reporter, progress.StagePWR, scaler); err != nil {
+		_ = os.Remove(tempDest)
+		return "", err
+	}
+
+	reporter.Report(progress.StagePWR, 100, "PWR file downloaded")
+
+	return dest, nil
 }
